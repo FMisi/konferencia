@@ -1,0 +1,610 @@
+from tkinter import *
+from tkinter import messagebox
+import hashlib
+import mysql.connector
+from PIL import *
+from mysql.connector.errors import IntegrityError
+import csv
+import pygame
+import configparser
+
+# Fő alkalmazás ablak
+app = Tk()
+app.title("Konferencia Rendszer")
+app.iconbitmap('konfico.ico')
+app.geometry("600x700")
+
+global bejelentkezett
+bejelentkezett = 0
+
+def handle_integrity_error(exception):
+    messagebox.showerror("Integritás Hiba", f"Adatbázis integritás hibát találtam: {exception}")
+
+# pygame mixer
+pygame.mixer.init()
+
+def play():
+    pygame.mixer.music.load("audio/beep.wav")
+    pygame.mixer.music.set_volume(0.5)
+    pygame.mixer.music.play(loops=0)
+
+# Kapcsolódás a MySQL adatbázishoz
+config = configparser.ConfigParser()
+config.read('config.ini')
+
+db = mysql.connector.connect(
+    host=config['MySQL']['host'],
+    user=config['MySQL']['user'],
+    passwd=config['MySQL']['passwd'],
+    database=config['MySQL']['database'],
+)
+
+# Sikerült csatlakozni a MySQL-hez?
+print(db)
+
+# Cursort létrehoz
+cursor = db.cursor(buffered=True)
+
+# DB törlése
+# my_cursor.execute("DROP DATABASE IF EXISTS Konferencia")
+
+# DBt létrehoz
+# my_cursor.execute("""CREATE DATABASE IF NOT EXISTS Konferencia
+#	DEFAULT CHARACTER SET utf8
+#	COLLATE utf8_hungarian_ci;""")
+# Sikerült létrehozni a DBt?
+#my_cursor.execute("SHOW DATABASES")
+#for db in my_cursor:
+#	print(db)
+
+# Űrlap mezők és címkék a cikk hozzáadásához
+cikk_cim_label = Label(app, text="Cikk Címe:")
+cikk_cim_label.grid(row=0, column=0, padx=10)
+cikk_cim = Entry(app)
+cikk_cim.grid(row=0, column=1, padx=10)
+
+szerzo_label = Label(app, text="Szerző ID:")
+szerzo_label.grid(row=1, column=0, padx=10)
+szerzo_id = Entry(app)
+szerzo_id.grid(row=1, column=1, padx=10)
+
+# Write To CSV Excel Fgv.-k
+def write_to_csv_felhasznalok():
+    cursor.execute("SELECT id, felhasznalonev, elotag, nev, szerepkor, email, intezmeny FROM felhasznalok")
+    result = cursor.fetchall()
+    justdoit(result)
+def justdoit(result):
+    with open("felhasznalok.csv", "w", newline="") as csvfile:
+        w = csv.writer(csvfile)
+        w.writerow(["Felhasználó ID", "Felhasználónév", "Előtag", "Név", "Szerepkör", "Email", "Intézmény"])
+        w.writerows(result)
+def write_to_csv_cikkek(result):
+    with open("cikkek.csv", "w", newline="") as csvfile:
+        w = csv.writer(csvfile)
+        w.writerow(["Cikk ID", "Cikk Címe", "Szerző"])
+        w.writerows(result)
+def write_to_csv_eloadasok(result):
+    with open("eloadasok.csv", "w", newline="") as csvfile:
+        w = csv.writer(csvfile)
+        w.writerow(["Előadás ID", "Cikk ID", "Cikk Cím", "Szekció ID", "Kezdés Időpont", "Előadó Név", "Előadó ID", "Előadás Hossz"])
+        w.writerows(result)
+def write_to_csv_szekciok(result):
+    with open("szekciok.csv", "w", newline="") as csvfile:
+        w = csv.writer(csvfile)
+        w.writerow(["ID", "Szekció Név", "Kezdési Időpont", "Levezető Elnök ID"])
+        w.writerows(result)
+
+# Függvény az új cikk hozzáadásához
+def uj_cikk():
+    try:
+        cikk_cim_text = cikk_cim.get()
+        szerzo_id_text = szerzo_id.get()
+        cursor.execute("INSERT INTO cikkek (cikk_cim, szerzo_id) VALUES (%s, %s)", (cikk_cim_text, szerzo_id_text))
+        db.commit()
+        cikk_cim.delete(0, END)
+        szerzo_id.delete(0, END)
+        cikkek_betoltes()
+    except IntegrityError as e:
+        # Handle IntegrityError
+        handle_integrity_error(e)
+
+# Gomb a cikk hozzáadásához
+cikk_hozzaadas_gomb = Button(app, text="Cikk Hozzáadása", command=lambda:[play(),uj_cikk()])
+cikk_hozzaadas_gomb.grid(row=2, column=0, columnspan=3, padx=10)
+
+# Lista a cikkek megtekintéséhez
+cikk_lista = Listbox(app)
+cikk_lista.grid(row=3, column=0, columnspan=2, sticky="we")
+
+# Függvény a cikkek betöltéséhez és megjelenítéséhez
+def cikkek_betoltes():
+    cikk_lista.delete(0, END)
+    cursor.execute("SELECT cikkek.id, cikkek.cikk_cim, felhasznalok.nev FROM cikkek JOIN felhasznalok ON cikkek.szerzo_id = felhasznalok.id")
+    cikkek = cursor.fetchall()
+    for sor in cikkek:
+        cikk_lista.insert(END, f"Cikk ID: {sor[0]} - Cikk Címe: {sor[1]} - Szerző: {sor[2]}")
+
+# Gomb a cikkek betöltéséhez
+cikkek_betoltes_gomb = Button(app, text="Cikkek Betöltése", command=lambda:[play(),cikkek_betoltes()])
+cikkek_betoltes_gomb.grid(row=4, column=0, columnspan=2)
+
+# Űrlap mezők és címkék a cikk törléséhez és frissítéséhez
+cikk_id_label = Label(app, text="Cikk ID:")
+cikk_id_label.grid(row=5, column=0, padx=10)
+cikk_id = Entry(app)
+cikk_id.grid(row=5, column=1, padx=10)
+
+uj_cikk_cim_label = Label(app, text="Új Cikk Címe:")
+uj_cikk_cim_label.grid(row=6, column=0, padx=10)
+uj_cikk_cim = Entry(app)
+uj_cikk_cim.grid(row=6, column=1, padx=10)
+
+# Függvény a cikk törléséhez
+def cikk_torles():
+    cikk_id_text = cikk_id.get()
+    cursor.execute("DELETE FROM cikkek WHERE id = %s", (cikk_id_text,))
+    db.commit()
+    cikk_id.delete(0, END)
+    cikkek_betoltes()
+
+# Gomb a cikk törléséhez
+cikk_torles_gomb = Button(app, text="Cikk Törlése", command=lambda:[play(),cikk_torles()])
+cikk_torles_gomb.grid(row=7, column=0, columnspan=2, padx=10)
+
+# Függvény a cikk frissítéséhez
+def cikk_frissites():
+    cikk_id_text = cikk_id.get()
+    uj_cikk_cim_text = uj_cikk_cim.get()
+    cursor.execute("UPDATE cikkek SET cikk_cim = %s WHERE id = %s", (uj_cikk_cim_text, cikk_id_text))
+    db.commit()
+    cikk_id.delete(0, END)
+    uj_cikk_cim.delete(0, END)
+    cikkek_betoltes()
+
+# Gomb a cikk frissítéséhez
+cikk_frissites_gomb = Button(app, text="Cikk Frissítése", command=lambda:[play(),cikk_frissites()])
+cikk_frissites_gomb.grid(row=8, column=0, columnspan=2, padx=10)
+
+# Listázás
+def list_felhasznalok():
+    list_felhasznalo_query = Tk()
+    list_felhasznalo_query.title("Listázás")
+    list_felhasznalo_query.iconbitmap('konfico.ico')
+    list_felhasznalo_query.geometry("800x650")
+    
+    # DB-t lekérdez
+    cursor.execute("SELECT * FROM Felhasznalok")
+    result = cursor.fetchall()
+
+    # Létrehozunk egy Frame-et a görgetősáv és a lista számára
+    frame = Frame(list_felhasznalo_query)
+    frame.grid(row=1, column=0, padx=10, pady=10, columnspan=33)
+    
+    # Létrehozunk egy görgetősávot
+    scrollbar = Scrollbar(frame, orient=VERTICAL)
+    
+    # Létrehozunk egy Listbox-ot a lista számára és hozzáadjuk a görgetősávot
+    listbox = Listbox(frame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, width=120, height=35)
+    scrollbar.config(command=listbox.yview)
+    
+    # Elhelyezzük a Listbox-ot és a görgetősávot a Frame-ben
+    listbox.grid(row=0, column=0)
+    scrollbar.grid(row=0, column=1, sticky="ns")
+    
+    for y in result:
+        listbox.insert(END, f"{y}")
+    
+    csv_button = Button(list_felhasznalo_query, text="Excel-be mentés (felhasznalok.csv)", command=lambda: [play(), write_to_csv_felhasznalok()])
+    csv_button.grid(row=0, column=30, padx=10, pady=10)
+    
+    # Quit Button már megint
+    quit_button = Button(list_felhasznalo_query, text="Kilépés", command=lambda: [play(), list_felhasznalo_query.destroy()])
+    quit_button.grid(row=0, column=32, padx=10, pady=10)
+
+def list_cikkek():
+    list_cikk_query = Tk()
+    list_cikk_query.title("Listázás")
+    list_cikk_query.iconbitmap('konfico.ico')
+    list_cikk_query.geometry("800x650")
+
+    # DB-t lekérdez
+    cursor.execute("SELECT cikkek.id, cikkek.cikk_cim, felhasznalok.nev FROM cikkek JOIN felhasznalok ON cikkek.szerzo_id = felhasznalok.id")
+    result = cursor.fetchall()
+
+    # Létrehozunk egy Frame-et a görgetősáv és a lista számára
+    frame = Frame(list_cikk_query)
+    frame.grid(row=1, column=0, padx=10, pady=10, columnspan=33)
+
+    # Létrehozunk egy görgetősávot
+    scrollbar = Scrollbar(frame, orient=VERTICAL)
+
+    # Létrehozunk egy Listbox-ot a lista számára és hozzáadjuk a görgetősávot
+    listbox = Listbox(frame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, width=120, height=35)
+    scrollbar.config(command=listbox.yview)
+
+    # Elhelyezzük a Listbox-ot és a görgetősávot a Frame-ben
+    listbox.grid(row=0, column=0)
+    scrollbar.grid(row=0, column=1, sticky="ns")
+
+    for cikk in result:
+        # Hozzáadjuk a cikkeket a Listbox-hoz formázott szövegként
+        listbox.insert(END, f"Cikk ID: {cikk[0]} - Cikk Címe: {cikk[1]} - Szerző: {cikk[2]}")
+
+    csv_button = Button(list_cikk_query, text="Excel-be mentés (cikkek.csv)", command=lambda: [play(), write_to_csv_cikkek(result)])
+    csv_button.grid(row=0, column=30, padx=10, pady=10)
+
+    # Quit Button már megint
+    quit_button = Button(list_cikk_query, text="Kilépés", command=lambda: [play(), list_cikk_query.destroy()])
+    quit_button.grid(row=0, column=32, padx=10, pady=10)
+
+def list_eloadasok():
+    list_eloadas_query = Tk()
+    list_eloadas_query.title("Listázás")
+    list_eloadas_query.iconbitmap('konfico.ico')
+    list_eloadas_query.geometry("800x650")
+    
+    # DB-t lekérdez
+    cursor.execute("SELECT * FROM Eloadasok")
+    result = cursor.fetchall()
+
+    # Létrehozunk egy Frame-et a görgetősáv és a lista számára
+    frame = Frame(list_eloadas_query)
+    frame.grid(row=1, column=0, padx=10, pady=10, columnspan=33)
+    
+    # Létrehozunk egy görgetősávot
+    scrollbar = Scrollbar(frame, orient=VERTICAL)
+    
+    # Létrehozunk egy Listbox-ot a lista számára és hozzáadjuk a görgetősávot
+    listbox = Listbox(frame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, width=120, height=35)
+    scrollbar.config(command=listbox.yview)
+    
+    # Elhelyezzük a Listbox-ot és a görgetősávot a Frame-ben
+    listbox.grid(row=0, column=0)
+    scrollbar.grid(row=0, column=1, sticky="ns")
+    
+    for y in result:
+        listbox.insert(END, f"{y}")
+    
+    csv_button = Button(list_eloadas_query, text="Excel-be mentés (eloadasok.csv)", command=lambda: [play(), write_to_csv_eloadasok(result)])
+    csv_button.grid(row=0, column=30, padx=10, pady=10)
+    
+    # Quit Button már megint
+    quit_button = Button(list_eloadas_query, text="Kilépés", command=lambda: [play(), list_eloadas_query.destroy()])
+    quit_button.grid(row=0, column=32, padx=10, pady=10)
+
+def list_szekciok():
+    list_szekcio_query = Tk()
+    list_szekcio_query.title("Listázás")
+    list_szekcio_query.iconbitmap('konfico.ico')
+    list_szekcio_query.geometry("800x650")
+    
+    # DB-t lekérdez
+    cursor.execute("SELECT * FROM Szekciok")
+    result = cursor.fetchall()
+    
+    num = 3
+
+    # Létrehozunk egy Frame-et a görgetősáv és a lista számára
+    frame = Frame(list_szekcio_query)
+    frame.grid(row=1, column=0, padx=10, pady=10, columnspan=33)
+    
+    # Létrehozunk egy görgetősávot
+    scrollbar = Scrollbar(frame, orient=VERTICAL)
+    
+    # Létrehozunk egy Listbox-ot a lista számára és hozzáadjuk a görgetősávot
+    listbox = Listbox(frame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, width=120, height=35)
+    scrollbar.config(command=listbox.yview)
+    
+    # Elhelyezzük a Listbox-ot és a görgetősávot a Frame-ben
+    listbox.grid(row=0, column=0)
+    scrollbar.grid(row=0, column=1, sticky="ns")
+    
+    for y in result:
+        listbox.insert(END, f"{y}")
+    
+    csv_button = Button(list_szekcio_query, text="Excel-be mentés (szekciok.csv)", command=lambda: [play(), write_to_csv_szekciok(result)])
+    csv_button.grid(row=0, column=30, padx=10, pady=10)
+    
+    # Quit Button már megint
+    quit_button = Button(list_szekcio_query, text="Kilépés", command=lambda: [play(), list_szekcio_query.destroy()])
+    quit_button.grid(row=0, column=32, padx=10, pady=10)
+
+# Összetettségek
+def osszetett_lekerdezes_1():
+    cursor.execute("SELECT szekciok.szekcio_nev, COUNT(eloadasok.id) AS eloadasok_szama FROM szekciok LEFT JOIN eloadasok ON szekciok.id = eloadasok.szekcio_id GROUP BY szekciok.szekcio_nev")
+    eredmeny = cursor.fetchall()
+    
+    # Új ablak létrehozása eredményekkel
+    ossz1_query = Tk()
+    ossz1_query.title("Eredmények - Összetett Lekérdezés 1")
+    ossz1_query.iconbitmap('konfico.ico')
+    ossz1_query.geometry("700x700")
+    eredmeny_azonosito = 1
+    for sor in eredmeny:
+        szekcio_nev = sor[0]
+        eloadasok_szama = sor[1]
+
+        oszlop = 0 if eredmeny_azonosito % 2 == 0 else 1  # 2 oszlop van, páros indexűek az első oszlopban
+        sor_index = eredmeny_azonosito // 2  # Osztás egész értékkel
+
+        eredmeny_label = Label(ossz1_query, text=f"Eredmény #{eredmeny_azonosito}: Szekció Neve: {szekcio_nev}, Előadások Száma: {eloadasok_szama}")
+        eredmeny_label.grid(row=sor_index, column=oszlop)
+        eredmeny_azonosito += 1
+
+# Gomb az összetett lekérdezés #1 futtatásához
+osszetett_lekerdezes_1_gomb = Button(app, text="Összetett Lekérdezés #1", command=lambda:[play(),osszetett_lekerdezes_1()])
+osszetett_lekerdezes_1_gomb.grid(row=11, column=0, columnspan=2, padx=10)
+
+# Funkció az összetett lekérdezés #2 megvalósításához
+def osszetett_lekerdezes_2():
+    cursor.execute("SELECT felhasznalok.nev, COUNT(cikkek.id) AS cikkek_szama FROM felhasznalok INNER JOIN cikkek ON felhasznalok.id = cikkek.szerzo_id GROUP BY felhasznalok.nev")
+    eredmeny = cursor.fetchall()
+    
+    # Új ablak létrehozása eredményekkel
+    ossz2_query = Tk()
+    ossz2_query.title("Eredmények - Összetett Lekérdezés 2")
+    ossz2_query.iconbitmap('konfico.ico')
+    ossz2_query.geometry("700x700")
+    # Az eredményeket két oszlopba rendezzük
+    eredmeny_azonosito = 1
+    for sor in eredmeny:
+        szerzo_nev = sor[0]
+        cikkek_szama = sor[1]
+        
+        oszlop = 0 if eredmeny_azonosito % 2 == 0 else 1  # 2 oszlop van, páros indexűek az első oszlopban
+        sor_index = eredmeny_azonosito // 2  # Osztás egész értékkel
+        
+        eredmeny_label = Label(ossz2_query, text=f"Eredmény #{eredmeny_azonosito}: Szerző Neve: {szerzo_nev}, Cikkek Száma: {cikkek_szama}")
+        eredmeny_label.grid(row=sor_index, column=oszlop)
+        eredmeny_azonosito += 1
+
+# Gomb az összetett lekérdezés #2 futtatásához
+osszetett_lekerdezes_2_gomb = Button(app, text="Összetett Lekérdezés #2", command=lambda:[play(),osszetett_lekerdezes_2()])
+osszetett_lekerdezes_2_gomb.grid(row=12, column=0, columnspan=2, padx=10)
+
+# Funkció az összetett lekérdezés #3 megvalósításához
+def osszetett_lekerdezes_3():
+    ossz3_query = Tk()
+    ossz3_query.title("Eredmények - Összetett Lekérdezés 3")
+    ossz3_query.iconbitmap('konfico.ico')
+    ossz3_query.geometry("500x500")
+
+    cursor.execute("SELECT felhasznalok.nev FROM felhasznalok INNER JOIN cikkek ON felhasznalok.id = cikkek.szerzo_id GROUP BY felhasznalok.id, felhasznalok.nev HAVING COUNT(cikkek.id) = (SELECT MAX(CountCikkek) FROM (SELECT COUNT(cikkek2.id) AS CountCikkek FROM cikkek cikkek2 GROUP BY cikkek2.szerzo_id) AS MaxCikkek)")
+    eredmeny = cursor.fetchall()
+
+    # Új ablak létrehozása az eredmennyel
+    eredmeny_label = Label(ossz3_query, text=f"A legtöbb cikket író szerző(k) neve(i): ")
+    for i, sor in enumerate(eredmeny):
+        nev = sor[0]
+        eredmeny_label["text"] += nev
+    
+        # Ha ez nem az utolsó sor, adj hozzá egy vesszőt
+        if i < len(eredmeny) - 1:
+            eredmeny_label["text"] += ", "
+    eredmeny_label.grid(row=0, column=0, padx=10, pady=10)
+
+# Gomb az összetett lekérdezés #3 futtatásához
+osszetett_lekerdezes_3_gomb = Button(app, text="Összetett Lekérdezés #3", command=lambda:[play(),osszetett_lekerdezes_3()])
+osszetett_lekerdezes_3_gomb.grid(row=13, column=0, columnspan=2, padx=10)
+
+def nem_lett_eloadas_rendelve():
+    nler_query = Tk()
+    nler_query.title("Eredmények - Nem Lett Előadás Rendelve")
+    nler_query.iconbitmap('konfico.ico')
+    nler_query.geometry("500x500")
+
+    cursor.execute("SELECT szekciok.id, szekciok.szekcio_nev FROM szekciok LEFT JOIN eloadasok ON szekciok.id = eloadasok.szekcio_id WHERE eloadasok.szekcio_id IS NULL")
+    eredmeny = cursor.fetchall()
+
+    # Az eredmények megjelenítése két oszlopban
+    for i, eredmeny_sor in enumerate(eredmeny):
+        column = i % 2
+        eredmeny_label = Label(nler_query, text=f"Nem lett előadás rendelve: {eredmeny_sor}")
+        eredmeny_label.grid(row=i // 2, column=column, padx=10, pady=10)
+
+# nler gomb
+nem_lett_eloadas_rendelve_gomb = Button(app, text="Szekciók, ahol nincs előadás", command=lambda:[play(),nem_lett_eloadas_rendelve()])
+nem_lett_eloadas_rendelve_gomb.grid(row=14, column=0, columnspan=2, padx=10)
+
+# Listázás gombok
+list_felhasznalo_button = Button(app, text="Listázás (Felhasználók)", command=lambda:[play(),list_felhasznalok()])
+list_felhasznalo_button.grid(row=4, column=4, padx=10)
+
+list_cikk_button = Button(app, text="Listázás (Cikkek)", command=lambda:[play(),list_cikkek()])
+list_cikk_button.grid(row=5, column=4, padx=10)
+
+list_eloado_button = Button(app, text="Listázás (Előadások)", command=lambda:[play(),list_eloadasok()])
+list_eloado_button.grid(row=6, column=4, padx=10)
+
+list_szekcio_button = Button(app, text="Listázás (Szekciók)", command=lambda:[play(),list_szekciok()])
+list_szekcio_button.grid(row=7, column=4, padx=10)
+
+# Kilépés gomb
+quit_button = Button(app, text="Kilépés", command=lambda:[app.quit()])
+quit_button.grid(row=18, column=1, sticky=W, padx=10)
+
+# Függvény a felhasználó regisztrációjához
+def regisztracio():
+    app2 = Tk()
+    app2.title("Konferencia Rendszer - Regisztráció")
+    app2.iconbitmap('konfico.ico')
+    app2.geometry("500x500")
+
+    # Űrlap mezők és címkék a felhasználó regisztrációjához
+    reg_felhnev_label = Label(app2, text="Felhasználónév:")
+    reg_felhnev_label.grid(row=9, column=0, padx=10)
+    reg_felhnev = Entry(app2)
+    reg_felhnev.grid(row=9, column=1, padx=10)
+
+    reg_jelszo_label = Label(app2, text="Jelszó:")
+    reg_jelszo_label.grid(row=10, column=0, padx=10)
+    reg_jelszo = Entry(app2, show="*")  # A jelszó mező tartalmát csillagokkal jelenítjük meg
+    reg_jelszo.grid(row=10, column=1, padx=10)
+
+    reg_jelszo_megerosites_label = Label(app2, text="Jelszó megerősítése:")
+    reg_jelszo_megerosites_label.grid(row=11, column=0, padx=10)
+    reg_jelszo_megerosites = Entry(app2, show="*")
+    reg_jelszo_megerosites.grid(row=11, column=1, padx=10)
+
+    # Űrlap mezők és címkék a felhasználó regisztrációjához
+    reg_nev_label = Label(app2, text="Teljes Név:")
+    reg_nev_label.grid(row=12, column=0, padx=10)
+    reg_nev = Entry(app2)
+    reg_nev.grid(row=12, column=1, padx=10)
+
+    reg_elotag_label = Label(app2, text="Előtag (például: Dr.):")
+    reg_elotag_label.grid(row=13, column=0, padx=10)
+    reg_elotag = Entry(app2)
+    reg_elotag.grid(row=13, column=1, padx=10)
+
+    reg_intezmeny_label = Label(app2, text="Intézmény:")
+    reg_intezmeny_label.grid(row=14, column=0, padx=10)
+    reg_intezmeny = Entry(app2)
+    reg_intezmeny.grid(row=14, column=1, padx=10)
+
+    reg_email_label = Label(app2, text="Email:")
+    reg_email_label.grid(row=15, column=0, padx=10)
+    reg_email = Entry(app2)
+    reg_email.grid(row=15, column=1, padx=10)
+
+    def regisztracio_rendben():
+        felhasznalonev = reg_felhnev.get()
+        jelszo = reg_jelszo.get()
+        jelszo_megerosites = reg_jelszo_megerosites.get()
+        elotag = reg_elotag.get()
+        teljes_nev = reg_nev.get()
+        email = reg_email.get()
+        intezmeny = reg_intezmeny.get()
+
+        # Jelszó ellenőrzése
+        if jelszo == jelszo_megerosites:
+            # Jelszó titkosítása
+            titkos_jelszo = hashlib.sha256(jelszo.encode()).hexdigest()
+
+            # Felhasználó regisztrálása az adatbázisban
+            cursor.execute("INSERT INTO felhasznalok (felhasznalonev, elotag, nev, email, intezmeny, hashed_jelszo) VALUES (%s, %s, %s, %s, %s, %s)", (felhasznalonev, elotag, teljes_nev, email, intezmeny, titkos_jelszo))
+            db.commit()
+
+            # Űrlap mezők ürítése
+            reg_felhnev.delete(0, END)
+            reg_jelszo.delete(0, END)
+            reg_jelszo_megerosites.delete(0, END)
+            reg_elotag.delete(0, END)
+            reg_nev.delete(0, END)
+            reg_email.delete(0, END)
+            reg_intezmeny.delete(0, END)
+            
+
+            # Sikeres regisztráció üzenet
+            messagebox.showinfo("Sikeres Regisztráció", "A regisztráció sikeres volt!")
+        else:
+            # Sikertelen regisztráció üzenet
+            messagebox.showerror("Hiba", "A jelszavak nem egyeznek meg!")
+    # Gomb a regisztrációhoz
+    regisztracio_gomb = Button(app2, text="Regisztráció", command=lambda: [play(), regisztracio_rendben()])
+    regisztracio_gomb.grid(row=18, column=0, padx=10)
+
+    # Quit Button már megint
+    quit_button = Button(app2, text="Kilépés", command=lambda: [play(), app2.destroy()])
+    quit_button.grid(row=20, column=0, padx=10, pady=10)
+
+# Bejelentkezes fgv.-ek
+def is_admin(username):
+    cursor.execute("SELECT szerepkor FROM felhasznalok WHERE felhasznalonev = %s", (username,))
+    result = cursor.fetchone()
+    if result and result[0] == "adminisztrátor":  # A szerepkor mező értéke admin, ha a felhasználó admin
+        return True
+    return False
+
+def bejelentkezes():
+    app3 = Tk()
+    app3.title("Konferencia Rendszer - Bejelentkezés")
+    app3.iconbitmap('konfico.ico')
+    app3.geometry("500x300")
+
+    # Űrlap mezők és címkék a bejelentkezéshez
+    bejelentkezes_nev_label = Label(app3, text="Felhasználónév:")
+    bejelentkezes_nev_label.grid(row=0, column=0, padx=10)
+    bejelentkezes_nev = Entry(app3)
+    bejelentkezes_nev.grid(row=0, column=1, padx=10)
+
+    bejelentkezes_jelszo_label = Label(app3, text="Jelszó:")
+    bejelentkezes_jelszo_label.grid(row=1, column=0, padx=10)
+    bejelentkezes_jelszo = Entry(app3, show="*")  # A jelszó mező tartalmát csillagokkal jelenítjük meg
+    bejelentkezes_jelszo.grid(row=1, column=1, padx=10)
+
+    def bejelentkezes_rendben():
+        felhasznalonev = bejelentkezes_nev.get()
+        jelszo = bejelentkezes_jelszo.get()
+
+        # Jelszó titkosítása
+        titkos_jelszo = hashlib.sha256(jelszo.encode()).hexdigest()
+
+        # Felhasználó ellenőrzése
+        cursor.execute("SELECT * FROM felhasznalok WHERE felhasznalonev = %s AND hashed_jelszo = %s", (felhasznalonev, titkos_jelszo))
+        regisztralt_felhasznalo = cursor.fetchone()
+
+        if regisztralt_felhasznalo:
+            # Sikeres bejelentkezés üzenet
+            bejelentkezett = 1
+            regisztracio_gomb.config(state="disabled")
+            regisztracio_gomb.grid_forget()
+            bejel_gomb.config(state="disabled")
+            bejel_gomb.grid_forget()         
+            # Kijelentkezés gomb
+            if bejelentkezett == 1:
+                placeholder_gomb = Button(app3, text="Placeholder")
+                placeholder_gomb.config(state="disabled")
+                placeholder_gomb.grid(row=9, column=4, padx=10)
+                placeholder_gomb.grid_forget()
+                kijel_gomb.config(state="normal")
+                kijel_gomb.grid(row=12, column=4, padx=10)
+
+            messagebox.showinfo("Sikeres Bejelentkezés", "A bejelentkezés sikeres volt! " + str(bejelentkezett))
+            if is_admin(felhasznalonev):
+                print("Az adminisztrátor bejelentkezett.")
+            else:
+                print("Nem adminisztrátor jelentkezett be.")
+            app3.destroy()
+        else:
+            # Sikertelen bejelentkezés üzenet
+            bejelentkezett = 0
+            messagebox.showerror("Hiba", "Hibás felhasználónév vagy jelszó! " + str(bejelentkezett))
+
+    # Gomb a bejelentkezéshez
+    bejelentkezes_gomb = Button(app3, text="Bejelentkezés", command=lambda: [play(), bejelentkezes_rendben()])
+    bejelentkezes_gomb.grid(row=2, column=0, pady=10)
+
+    # Quit Button már megint
+    quit_button = Button(app3, text="Kilépés", command=lambda: [play(), app3.destroy()])
+    quit_button.grid(row=4, column=0, padx=10, pady=10)
+
+# Kijelentkezes Fgv.
+def kijelentkezes():
+    bejelentkezett = 0
+
+    regisztracio_gomb.config(state="normal")
+    regisztracio_gomb.grid(row=9, column=4, padx=10)
+
+    bejel_gomb.config(state="normal")
+    bejel_gomb.grid(row=12, column=4, padx=10)
+
+    kijel_gomb.config(state="disabled")
+    kijel_gomb.grid_forget()
+    messagebox.showinfo("Sikeres Kijelentkezés", "A kijelentkezés sikeres volt! " + str(bejelentkezett))
+
+# Gomb a regisztráció kezdéséhez
+regisztracio_gomb = Button(app, text="Regisztráció", command=lambda: [play(), regisztracio()])
+regisztracio_gomb.grid(row=9, column=4, padx=10)
+
+# Gomb a bejelentkezéshez
+bejel_gomb = Button(app, text="Bejelentkezes", command=lambda: [play(), bejelentkezes()])
+bejel_gomb.grid(row=12, column=4, padx=10)
+
+kijel_gomb = Button(app, text="Kijelentkezés", command=lambda: [play(), kijelentkezes()])
+
+app.mainloop()
+
+# Kapcsolat lezárása a program befejezése után
+cursor.close()
+db.close()

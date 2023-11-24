@@ -1,0 +1,43 @@
+-- Felhasználók tábla
+CREATE TABLE felhasznalok (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    felhasznalonev VARCHAR(255) NOT NULL,
+    elotag VARCHAR(255),
+    nev VARCHAR(255) NOT NULL,
+    szerepkor VARCHAR(255) NOT NULL,
+    email VARCHAR(255),
+    intezmeny VARCHAR(255)
+	hashed_jelszo VARCHAR(255) NOT NULL
+);
+
+-- Szekciók tábla
+CREATE TABLE szekciok (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    szekcio_nev VARCHAR(255) NOT NULL,
+    kezdes_idopont DATETIME NOT NULL,
+    levezeto_elnok_id INT,
+    FOREIGN KEY (levezeto_elnok_id) REFERENCES felhasznalok(id)
+);
+
+-- Cikkek tábla
+CREATE TABLE cikkek (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    cikk_cim VARCHAR(255) NOT NULL,
+    szerzo_id INT,
+    FOREIGN KEY (szerzo_id) REFERENCES felhasznalok(id)
+);
+
+-- Előadások tábla
+CREATE TABLE eloadasok (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    cikk_id INT,
+    cikk_cim VARCHAR(255) NOT NULL,
+    szekcio_id INT,
+    kezdes_idopont DATETIME NOT NULL,
+    eloado_nev VARCHAR(255) NOT NULL,
+    eloado_id INT,
+    eloado_hossz INT,
+    FOREIGN KEY (cikk_id) REFERENCES cikkek(id),
+    FOREIGN KEY (szekcio_id) REFERENCES szekciok(id),
+    FOREIGN KEY (eloado_id) REFERENCES felhasznalok(id)
+);
