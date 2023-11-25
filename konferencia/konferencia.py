@@ -1,18 +1,20 @@
 from tkinter import *
 from tkinter import messagebox
 import hashlib
+from tkinter import ttk
 import mysql.connector
 from PIL import *
 from mysql.connector.errors import IntegrityError
 import csv
 import pygame
 import configparser
+from datetime import datetime
 
 # Fő alkalmazás ablak
 app = Tk()
 app.title("Konferencia Rendszer")
 app.iconbitmap('konfico.ico')
-app.geometry("600x700")
+app.geometry("650x650")
 
 global bejelentkezett
 bejelentkezett = 0
@@ -46,27 +48,16 @@ print(db)
 cursor = db.cursor(buffered=True)
 
 # DB törlése
-# my_cursor.execute("DROP DATABASE IF EXISTS Konferencia")
+# cursor.execute("DROP DATABASE IF EXISTS Konferencia")
 
 # DBt létrehoz
-# my_cursor.execute("""CREATE DATABASE IF NOT EXISTS Konferencia
+# cursor.execute("""CREATE DATABASE IF NOT EXISTS Konferencia
 #	DEFAULT CHARACTER SET utf8
 #	COLLATE utf8_hungarian_ci;""")
 # Sikerült létrehozni a DBt?
-#my_cursor.execute("SHOW DATABASES")
+#cursor.execute("SHOW DATABASES")
 #for db in my_cursor:
 #	print(db)
-
-# Űrlap mezők és címkék a cikk hozzáadásához
-cikk_cim_label = Label(app, text="Cikk Címe:")
-cikk_cim_label.grid(row=0, column=0, padx=10)
-cikk_cim = Entry(app)
-cikk_cim.grid(row=0, column=1, padx=10)
-
-szerzo_label = Label(app, text="Szerző ID:")
-szerzo_label.grid(row=1, column=0, padx=10)
-szerzo_id = Entry(app)
-szerzo_id.grid(row=1, column=1, padx=10)
 
 # Write To CSV Excel Fgv.-k
 def write_to_csv_felhasznalok():
@@ -93,33 +84,46 @@ def write_to_csv_szekciok(result):
         w = csv.writer(csvfile)
         w.writerow(["ID", "Szekció Név", "Kezdési Időpont", "Levezető Elnök ID"])
         w.writerows(result)
-
-# Függvény az új cikk hozzáadásához
-def uj_cikk():
-    try:
-        cikk_cim_text = cikk_cim.get()
-        szerzo_id_text = szerzo_id.get()
-        cursor.execute("INSERT INTO cikkek (cikk_cim, szerzo_id) VALUES (%s, %s)", (cikk_cim_text, szerzo_id_text))
-        db.commit()
-        cikk_cim.delete(0, END)
-        szerzo_id.delete(0, END)
-        cikkek_betoltes()
-    except IntegrityError as e:
-        # Handle IntegrityError
-        handle_integrity_error(e)
-
-# Gomb a cikk hozzáadásához
-cikk_hozzaadas_gomb = Button(app, text="Cikk Hozzáadása", command=lambda:[play(),uj_cikk()])
-cikk_hozzaadas_gomb.grid(row=2, column=0, columnspan=3, padx=10)
+def write_to_csv_osszetett_1(result):
+    with open("csvk/osszetett_lekerdezes_1.csv", "w", newline="") as file:
+        w = csv.writer(file)
+        w.writerow(["Szekció Név", "Előadások Száma"])
+        w.writerows(result)
+def write_to_csv_osszetett_2(result):
+    with open("csvk/osszetett_lekerdezes_2.csv", "w", newline="") as file:
+        w = csv.writer(file)
+        w.writerow(["Szerző Neve", "Cikkek Száma"])
+        w.writerows(result)
+def write_to_csv_osszetett_3(result):
+    with open("csvk/osszetett_lekerdezes_3.csv", "w", newline="") as file:
+        w = csv.writer(file)
+        w.writerow(["Szerző Neve"])
+        w.writerows(result)
+def write_to_csv_nem_lett_eloadas(result):
+    with open("csvk/nem_lett_eloadas.csv", "w", newline="") as file:
+        w = csv.writer(file)
+        w.writerow(["Szekció ID", "Szekció Név"])
+        w.writerows(result)
 
 # Lista a cikkek megtekintéséhez
-cikk_lista = Listbox(app)
-cikk_lista.grid(row=3, column=0, columnspan=2, sticky="we")
+# Létrehozunk egy Frame-et a görgetősáv és a lista számára
+frame = Frame(app)
+frame.grid(row=3, column=0, columnspan=2)
+# Létrehozunk egy görgetősávot
+scrollbar = Scrollbar(frame, orient=VERTICAL)
+
+# Létrehozunk egy Listbox-ot a lista számára és hozzáadjuk a görgetősávot
+cikk_lista = Listbox(frame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, width=70, height=10)
+scrollbar.config(command=cikk_lista.yview)
+
+# Elhelyezzük a Listbox-ot és a görgetősávot a Frame-ben
+cikk_lista.grid(row=0, column=0)
+scrollbar.grid(row=0, column=1, sticky="ns")
 
 # Függvény a cikkek betöltéséhez és megjelenítéséhez
 def cikkek_betoltes():
     cikk_lista.delete(0, END)
-    cursor.execute("SELECT cikkek.id, cikkek.cikk_cim, felhasznalok.nev FROM cikkek JOIN felhasznalok ON cikkek.szerzo_id = felhasznalok.id")
+    cursor.execute("SELECT cikkek.id, cikkek.cikk_cim, felhasznalok.nev FROM cikkek JOIN felhasznalok ON cikkek.szerzo_id = felhasznalok.id ORDER BY cikkek.id")
     cikkek = cursor.fetchall()
     for sor in cikkek:
         cikk_lista.insert(END, f"Cikk ID: {sor[0]} - Cikk Címe: {sor[1]} - Szerző: {sor[2]}")
@@ -130,14 +134,10 @@ cikkek_betoltes_gomb.grid(row=4, column=0, columnspan=2)
 
 # Űrlap mezők és címkék a cikk törléséhez és frissítéséhez
 cikk_id_label = Label(app, text="Cikk ID:")
-cikk_id_label.grid(row=5, column=0, padx=10)
 cikk_id = Entry(app)
-cikk_id.grid(row=5, column=1, padx=10)
 
 uj_cikk_cim_label = Label(app, text="Új Cikk Címe:")
-uj_cikk_cim_label.grid(row=6, column=0, padx=10)
 uj_cikk_cim = Entry(app)
-uj_cikk_cim.grid(row=6, column=1, padx=10)
 
 # Függvény a cikk törléséhez
 def cikk_torles():
@@ -149,7 +149,87 @@ def cikk_torles():
 
 # Gomb a cikk törléséhez
 cikk_torles_gomb = Button(app, text="Cikk Törlése", command=lambda:[play(),cikk_torles()])
-cikk_torles_gomb.grid(row=7, column=0, columnspan=2, padx=10)
+
+# Előadás törlése ablak fgv.-ek
+def get_deletable_eloadasok():
+    cursor.execute("SELECT * FROM eloadasok")
+    deletable_eloadasok = cursor.fetchall()
+    return deletable_eloadasok
+
+def delete_eloadas(eloadas_id):
+    cursor.execute("DELETE FROM eloadasok WHERE id = %s", (eloadas_id,))
+    db.commit()
+    messagebox.showinfo("Sikeres törlés", "Az előadás sikeresen törölve lett.")
+
+def eloadas_torlese_ablak():
+    eloadas_deletion_query = Tk()
+    eloadas_deletion_query.title("Előadás Törlése")
+    eloadas_deletion_query.geometry("800x400")
+
+    # Létrehozunk egy Frame-et a görgetősáv és a lista számára
+    frame = Frame(eloadas_deletion_query)
+    frame.grid(row=1, column=0, padx=10, pady=10, columnspan=2)
+
+    # Létrehozunk egy görgetősávot
+    scrollbar = Scrollbar(frame, orient=VERTICAL)
+
+    # Létrehozunk egy Treeview-ot a lista számára és hozzáadjuk a görgetősávot
+    tree = ttk.Treeview(frame, columns=("ID", "Cikk ID", "Cikk Cím", "Szekció ID", "Kezdés Időpont", "Előadó Név", "Előadó ID", "Előadás Hossz"), show="headings", selectmode=EXTENDED)
+    scrollbar.config(command=tree.yview)
+
+    # Oszlopok beállítása
+    tree.heading("ID", text="ID")
+    tree.heading("Cikk ID", text="Cikk ID")
+    tree.heading("Cikk Cím", text="Cikk Cím")
+    tree.heading("Szekció ID", text="Szekció ID")
+    tree.heading("Kezdés Időpont", text="Kezdés Időpont")
+    tree.heading("Előadó Név", text="Előadó Név")
+    tree.heading("Előadó ID", text="Előadó ID")
+    tree.heading("Előadás Hossz", text="Előadás Hossz")
+    tree.column("ID", anchor=W, width=40)
+    tree.column("Cikk ID", anchor=W, width=60)
+    tree.column("Cikk Cím", anchor=W, width=140)
+    tree.column("Szekció ID", anchor=W, width=70)
+    tree.column("Kezdés Időpont", anchor=W, width=115)
+    tree.column("Előadó Név", anchor=W, width=140)
+    tree.column("Előadó ID", anchor=W, width=60)
+    tree.column("Előadás Hossz", anchor=W, width=90)
+
+    # Adatok feltöltése a Treeview-be
+    deletable_eloadasok = get_deletable_eloadasok()
+    for row in deletable_eloadasok:
+        tree.insert("", "end", values=row)
+
+    # Elhelyezzük a Treeview-ot és a görgetősávot a Frame-ben
+    tree.grid(row=0, column=0)
+    scrollbar.grid(row=0, column=1, sticky="ns")
+
+    def delete_selected_eloadasok():
+        selected_items = tree.selection()
+        if not selected_items:
+            messagebox.showwarning("Nincs kiválasztva", "Kérem, válassza ki a törölni kívánt előadásokat.")
+            return
+
+        for item in selected_items:
+            eloadas_id = int(tree.item(item, "values")[0])
+            delete_eloadas(eloadas_id)
+
+        # Frissítjük a Treeview-t az új adatokkal (esetlegesen már törölt előadásokkal)
+        tree.delete(*tree.get_children())
+        deletable_eloadasok = get_deletable_eloadasok()
+        for row in deletable_eloadasok:
+            tree.insert("", "end", values=row)
+
+    # Törlés gomb
+    delete_button = Button(eloadas_deletion_query, text="Kiválasztott előadások törlése", command=lambda:[play(),delete_selected_eloadasok()])
+    delete_button.grid(row=0, column=0, padx=10, pady=10)
+
+    # Quit Button már megint
+    quit_button = Button(eloadas_deletion_query, text="Kilépés", command=lambda:[play(),eloadas_deletion_query.destroy()])
+    quit_button.grid(row=0, column=1, padx=10, pady=10)
+
+# Gomb az eloadas törléséhez
+eloadas_torlese_gomb = Button(app, text="Előadás Törlése", command=lambda:[play(),eloadas_torlese_ablak()])
 
 # Függvény a cikk frissítéséhez
 def cikk_frissites():
@@ -163,14 +243,13 @@ def cikk_frissites():
 
 # Gomb a cikk frissítéséhez
 cikk_frissites_gomb = Button(app, text="Cikk Frissítése", command=lambda:[play(),cikk_frissites()])
-cikk_frissites_gomb.grid(row=8, column=0, columnspan=2, padx=10)
 
 # Listázás
 def list_felhasznalok():
     list_felhasznalo_query = Tk()
     list_felhasznalo_query.title("Listázás")
     list_felhasznalo_query.iconbitmap('konfico.ico')
-    list_felhasznalo_query.geometry("800x650")
+    list_felhasznalo_query.geometry("950x650")
     
     # DB-t lekérdez
     cursor.execute("SELECT * FROM Felhasznalok")
@@ -184,7 +263,7 @@ def list_felhasznalok():
     scrollbar = Scrollbar(frame, orient=VERTICAL)
     
     # Létrehozunk egy Listbox-ot a lista számára és hozzáadjuk a görgetősávot
-    listbox = Listbox(frame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, width=120, height=35)
+    listbox = Listbox(frame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, width=150, height=35)
     scrollbar.config(command=listbox.yview)
     
     # Elhelyezzük a Listbox-ot és a görgetősávot a Frame-ben
@@ -208,7 +287,7 @@ def list_cikkek():
     list_cikk_query.geometry("800x650")
 
     # DB-t lekérdez
-    cursor.execute("SELECT cikkek.id, cikkek.cikk_cim, felhasznalok.nev FROM cikkek JOIN felhasznalok ON cikkek.szerzo_id = felhasznalok.id")
+    cursor.execute("SELECT cikkek.id, cikkek.cikk_cim, felhasznalok.nev FROM cikkek JOIN felhasznalok ON cikkek.szerzo_id = felhasznalok.id ORDER BY cikkek.id")
     result = cursor.fetchall()
 
     # Létrehozunk egy Frame-et a görgetősáv és a lista számára
@@ -263,7 +342,11 @@ def list_eloadasok():
     scrollbar.grid(row=0, column=1, sticky="ns")
     
     for y in result:
-        listbox.insert(END, f"{y}")
+        # Módosítjuk a dátumot egyedi formátumra
+        formatted_date = y[4].strftime("%Y-%m-%d %H:%M")
+        
+        # Hozzáadjuk az elemet a Listbox-hoz a formázott dátummal
+        listbox.insert(END, f"{y[0]}, {y[1]}, {y[2]}, {y[3]}, {formatted_date}, {y[5]}, {y[6]}, {y[7]}")
     
     csv_button = Button(list_eloadas_query, text="Excel-be mentés (eloadasok.csv)", command=lambda: [play(), write_to_csv_eloadasok(result)])
     csv_button.grid(row=0, column=30, padx=10, pady=10)
@@ -271,7 +354,7 @@ def list_eloadasok():
     # Quit Button már megint
     quit_button = Button(list_eloadas_query, text="Kilépés", command=lambda: [play(), list_eloadas_query.destroy()])
     quit_button.grid(row=0, column=32, padx=10, pady=10)
-
+    
 def list_szekciok():
     list_szekcio_query = Tk()
     list_szekcio_query.title("Listázás")
@@ -281,8 +364,6 @@ def list_szekciok():
     # DB-t lekérdez
     cursor.execute("SELECT * FROM Szekciok")
     result = cursor.fetchall()
-    
-    num = 3
 
     # Létrehozunk egy Frame-et a görgetősáv és a lista számára
     frame = Frame(list_szekcio_query)
@@ -300,7 +381,11 @@ def list_szekciok():
     scrollbar.grid(row=0, column=1, sticky="ns")
     
     for y in result:
-        listbox.insert(END, f"{y}")
+        # Módosítjuk a dátumot egyedi formátumra
+        formatted_date = y[2].strftime("%Y-%m-%d %H:%M")
+        
+        # Hozzáadjuk az elemet a Listbox-hoz a formázott dátummal
+        listbox.insert(END, f"{y[0]}, {y[1]}, {formatted_date}, {y[3]}")
     
     csv_button = Button(list_szekcio_query, text="Excel-be mentés (szekciok.csv)", command=lambda: [play(), write_to_csv_szekciok(result)])
     csv_button.grid(row=0, column=30, padx=10, pady=10)
@@ -313,23 +398,41 @@ def list_szekciok():
 def osszetett_lekerdezes_1():
     cursor.execute("SELECT szekciok.szekcio_nev, COUNT(eloadasok.id) AS eloadasok_szama FROM szekciok LEFT JOIN eloadasok ON szekciok.id = eloadasok.szekcio_id GROUP BY szekciok.szekcio_nev")
     eredmeny = cursor.fetchall()
-    
+
     # Új ablak létrehozása eredményekkel
     ossz1_query = Tk()
     ossz1_query.title("Eredmények - Összetett Lekérdezés 1")
     ossz1_query.iconbitmap('konfico.ico')
     ossz1_query.geometry("700x700")
-    eredmeny_azonosito = 1
-    for sor in eredmeny:
+
+    # Létrehozunk egy Frame-et a görgetősáv és a lista számára
+    frame = Frame(ossz1_query)
+    frame.grid(row=1, column=0, padx=10, pady=10, columnspan=2)
+
+    # Létrehozunk egy görgetősávot
+    scrollbar = Scrollbar(frame, orient=VERTICAL)
+
+    # Létrehozunk egy Listbox-ot a lista számára és hozzáadjuk a görgetősávot
+    listbox = Listbox(frame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, width=100, height=35)
+    scrollbar.config(command=listbox.yview)
+
+    # Elhelyezzük a Listbox-ot és a görgetősávot a Frame-ben
+    listbox.grid(row=0, column=0)
+    scrollbar.grid(row=0, column=1, sticky="ns")
+
+    # Az eredményeket megjelenítjük a Listbox-ban
+    for i, sor in enumerate(eredmeny):
         szekcio_nev = sor[0]
         eloadasok_szama = sor[1]
+        listbox.insert(END, f"Eredmény #{i + 1}: Szekció Neve: {szekcio_nev}, Előadások Száma: {eloadasok_szama}")
 
-        oszlop = 0 if eredmeny_azonosito % 2 == 0 else 1  # 2 oszlop van, páros indexűek az első oszlopban
-        sor_index = eredmeny_azonosito // 2  # Osztás egész értékkel
+    # Excel-be mentés gomb
+    csv_button = Button(ossz1_query, text="Excel-be mentés (osszetett_lekerdezes_1.csv)", command=lambda: [play(), write_to_csv_osszetett_1(eredmeny)])
+    csv_button.grid(row=0, column=0, padx=10, pady=10)
 
-        eredmeny_label = Label(ossz1_query, text=f"Eredmény #{eredmeny_azonosito}: Szekció Neve: {szekcio_nev}, Előadások Száma: {eloadasok_szama}")
-        eredmeny_label.grid(row=sor_index, column=oszlop)
-        eredmeny_azonosito += 1
+    # Kilépés gomb
+    quit_button = Button(ossz1_query, text="Kilépés", command=lambda: [play(), ossz1_query.destroy()])
+    quit_button.grid(row=0, column=1, padx=10, pady=10)
 
 # Gomb az összetett lekérdezés #1 futtatásához
 osszetett_lekerdezes_1_gomb = Button(app, text="Összetett Lekérdezés #1", command=lambda:[play(),osszetett_lekerdezes_1()])
@@ -339,24 +442,41 @@ osszetett_lekerdezes_1_gomb.grid(row=11, column=0, columnspan=2, padx=10)
 def osszetett_lekerdezes_2():
     cursor.execute("SELECT felhasznalok.nev, COUNT(cikkek.id) AS cikkek_szama FROM felhasznalok INNER JOIN cikkek ON felhasznalok.id = cikkek.szerzo_id GROUP BY felhasznalok.nev")
     eredmeny = cursor.fetchall()
-    
+
     # Új ablak létrehozása eredményekkel
     ossz2_query = Tk()
     ossz2_query.title("Eredmények - Összetett Lekérdezés 2")
     ossz2_query.iconbitmap('konfico.ico')
     ossz2_query.geometry("700x700")
-    # Az eredményeket két oszlopba rendezzük
-    eredmeny_azonosito = 1
-    for sor in eredmeny:
+
+    # Létrehozunk egy Frame-et a görgetősáv és a lista számára
+    frame = Frame(ossz2_query)
+    frame.grid(row=1, column=0, padx=10, pady=10, columnspan=2)
+
+    # Létrehozunk egy görgetősávot
+    scrollbar = Scrollbar(frame, orient=VERTICAL)
+
+    # Létrehozunk egy Listbox-ot a lista számára és hozzáadjuk a görgetősávot
+    listbox = Listbox(frame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, width=100, height=35)
+    scrollbar.config(command=listbox.yview)
+
+    # Elhelyezzük a Listbox-ot és a görgetősávot a Frame-ben
+    listbox.grid(row=0, column=0)
+    scrollbar.grid(row=0, column=1, sticky="ns")
+
+    # Az eredményeket megjelenítjük a Listbox-ban
+    for i, sor in enumerate(eredmeny):
         szerzo_nev = sor[0]
         cikkek_szama = sor[1]
-        
-        oszlop = 0 if eredmeny_azonosito % 2 == 0 else 1  # 2 oszlop van, páros indexűek az első oszlopban
-        sor_index = eredmeny_azonosito // 2  # Osztás egész értékkel
-        
-        eredmeny_label = Label(ossz2_query, text=f"Eredmény #{eredmeny_azonosito}: Szerző Neve: {szerzo_nev}, Cikkek Száma: {cikkek_szama}")
-        eredmeny_label.grid(row=sor_index, column=oszlop)
-        eredmeny_azonosito += 1
+        listbox.insert(END, f"Eredmény #{i + 1}: Szerző Neve: {szerzo_nev}, Cikkek Száma: {cikkek_szama}")
+
+    # Excel-be mentés gomb
+    csv_button = Button(ossz2_query, text="Excel-be mentés (osszetett_lekerdezes_2.csv)", command=lambda: [play(), write_to_csv_osszetett_2(eredmeny)])
+    csv_button.grid(row=0, column=0, padx=10, pady=10)
+
+    # Kilépés gomb
+    quit_button = Button(ossz2_query, text="Kilépés", command=lambda: [play(), ossz2_query.destroy()])
+    quit_button.grid(row=0, column=1, padx=10, pady=10)
 
 # Gomb az összetett lekérdezés #2 futtatásához
 osszetett_lekerdezes_2_gomb = Button(app, text="Összetett Lekérdezés #2", command=lambda:[play(),osszetett_lekerdezes_2()])
@@ -372,16 +492,37 @@ def osszetett_lekerdezes_3():
     cursor.execute("SELECT felhasznalok.nev FROM felhasznalok INNER JOIN cikkek ON felhasznalok.id = cikkek.szerzo_id GROUP BY felhasznalok.id, felhasznalok.nev HAVING COUNT(cikkek.id) = (SELECT MAX(CountCikkek) FROM (SELECT COUNT(cikkek2.id) AS CountCikkek FROM cikkek cikkek2 GROUP BY cikkek2.szerzo_id) AS MaxCikkek)")
     eredmeny = cursor.fetchall()
 
-    # Új ablak létrehozása az eredmennyel
-    eredmeny_label = Label(ossz3_query, text=f"A legtöbb cikket író szerző(k) neve(i): ")
+    # Létrehozunk egy Frame-et a görgetősáv és a lista számára
+    frame = Frame(ossz3_query)
+    frame.grid(row=1, column=0, padx=10, pady=10, columnspan=2)
+
+    # Létrehozunk egy görgetősávot
+    scrollbar = Scrollbar(frame, orient=VERTICAL)
+
+    # Létrehozunk egy Listbox-ot a lista számára és hozzáadjuk a görgetősávot
+    listbox = Listbox(frame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, width=50, height=15)
+    scrollbar.config(command=listbox.yview)
+
+    # Elhelyezzük a Listbox-ot és a görgetősávot a Frame-ben
+    listbox.grid(row=0, column=0)
+    scrollbar.grid(row=0, column=1, sticky="ns")
+
+    # Az eredményeket megjelenítjük a Listbox-ban
+    eredmeny_label = Label(ossz3_query, text="A legtöbb cikket író szerző(k) neve(i): ")
     for i, sor in enumerate(eredmeny):
         nev = sor[0]
-        eredmeny_label["text"] += nev
-    
+        listbox.insert(END, nev)
         # Ha ez nem az utolsó sor, adj hozzá egy vesszőt
         if i < len(eredmeny) - 1:
             eredmeny_label["text"] += ", "
-    eredmeny_label.grid(row=0, column=0, padx=10, pady=10)
+
+    # Excel-be mentés gomb
+    csv_button = Button(ossz3_query, text="Excel-be mentés (osszetett_lekerdezes_3.csv)", command=lambda: [play(), write_to_csv_osszetett_3(eredmeny)])
+    csv_button.grid(row=0, column=0, padx=10, pady=10)
+
+    # Kilépés gomb
+    quit_button = Button(ossz3_query, text="Kilépés", command=lambda: [play(), ossz3_query.destroy()])
+    quit_button.grid(row=0, column=1, padx=10, pady=10)
 
 # Gomb az összetett lekérdezés #3 futtatásához
 osszetett_lekerdezes_3_gomb = Button(app, text="Összetett Lekérdezés #3", command=lambda:[play(),osszetett_lekerdezes_3()])
@@ -391,16 +532,36 @@ def nem_lett_eloadas_rendelve():
     nler_query = Tk()
     nler_query.title("Eredmények - Nem Lett Előadás Rendelve")
     nler_query.iconbitmap('konfico.ico')
-    nler_query.geometry("500x500")
+    nler_query.geometry("800x700")
 
     cursor.execute("SELECT szekciok.id, szekciok.szekcio_nev FROM szekciok LEFT JOIN eloadasok ON szekciok.id = eloadasok.szekcio_id WHERE eloadasok.szekcio_id IS NULL")
     eredmeny = cursor.fetchall()
 
-    # Az eredmények megjelenítése két oszlopban
-    for i, eredmeny_sor in enumerate(eredmeny):
-        column = i % 2
-        eredmeny_label = Label(nler_query, text=f"Nem lett előadás rendelve: {eredmeny_sor}")
-        eredmeny_label.grid(row=i // 2, column=column, padx=10, pady=10)
+    # Létrehozunk egy Frame-et a görgetősáv és a lista számára
+    frame = Frame(nler_query)
+    frame.grid(row=1, column=0, padx=10, pady=10, columnspan=2)
+    
+    # Létrehozunk egy görgetősávot
+    scrollbar = Scrollbar(frame, orient=VERTICAL)
+    
+    # Létrehozunk egy Listbox-ot a lista számára és hozzáadjuk a görgetősávot
+    listbox = Listbox(frame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, width=105, height=35)
+    scrollbar.config(command=listbox.yview)
+    
+    # Elhelyezzük a Listbox-ot és a görgetősávot a Frame-ben
+    listbox.grid(row=0, column=0)
+    scrollbar.grid(row=0, column=1, sticky="ns")
+    
+    # Az eredmények megjelenítése a Listbox-ban
+    for eredmeny_sor in eredmeny:
+        listbox.insert(END, f"Nem lett előadás rendelve: {eredmeny_sor}")
+
+    csv_button = Button(nler_query, text="Excel-be mentés (nem_lett_eloadas.csv)", command=lambda: [play(), write_to_csv_nem_lett_eloadas(eredmeny)])
+    csv_button.grid(row=0, column=0, padx=10, pady=10)
+
+    # Quit Button már megint
+    quit_button = Button(nler_query, text="Kilépés", command=lambda: [play(), nler_query.destroy()])
+    quit_button.grid(row=0, column=2, padx=10, pady=10)
 
 # nler gomb
 nem_lett_eloadas_rendelve_gomb = Button(app, text="Szekciók, ahol nincs előadás", command=lambda:[play(),nem_lett_eloadas_rendelve()])
@@ -419,9 +580,88 @@ list_eloado_button.grid(row=6, column=4, padx=10)
 list_szekcio_button = Button(app, text="Listázás (Szekciók)", command=lambda:[play(),list_szekciok()])
 list_szekcio_button.grid(row=7, column=4, padx=10)
 
+szekcio_torlese_button = Button(app, text="Szekcio törlése", command=lambda:[play(),szekcio_torlese_ablak()])
+
 # Kilépés gomb
 quit_button = Button(app, text="Kilépés", command=lambda:[app.quit()])
 quit_button.grid(row=18, column=1, sticky=W, padx=10)
+
+# Szekció törlése ablak fgv.-ek
+# Törölhető szekciók lekérdezése
+def get_deletable_sections():
+    cursor.execute("SELECT id, szekcio_nev FROM szekciok WHERE id NOT IN (SELECT szekcio_id FROM cikkek UNION SELECT szekcio_id FROM eloadasok)")
+    deletable_sections = cursor.fetchall()
+    return deletable_sections
+
+def can_delete_section(section_id):
+    cursor.execute("SELECT 1 FROM cikkek WHERE szekcio_id = %s", (section_id,))
+    has_articles = cursor.fetchone()
+
+    cursor.execute("SELECT 1 FROM eloadasok WHERE szekcio_id = %s", (section_id,))
+    has_presentations = cursor.fetchone()
+
+    return not has_articles and not has_presentations
+
+def delete_section(section_id):
+    if can_delete_section(section_id):
+        cursor.execute("DELETE FROM szekciok WHERE id = %s", (section_id,))
+        db.commit()
+        messagebox.showinfo("Sikeres törlés", "A szekció sikeresen törölve lett.")
+    else:
+        messagebox.showwarning("Törlés nem engedélyezett", "A szekciót nem lehet törölni, mert tartozik hozzá cikk vagy előadás.")
+
+def szekcio_torlese_ablak():
+    section_deletion_query = Tk()
+    section_deletion_query.title("Szekció Törlése")
+    section_deletion_query.geometry("600x400")
+
+    # Létrehozunk egy Frame-et a görgetősáv és a lista számára
+    frame = Frame(section_deletion_query)
+    frame.grid(row=1, column=0, padx=10, pady=10, columnspan=2)
+
+    # Létrehozunk egy görgetősávot
+    scrollbar = Scrollbar(frame, orient=VERTICAL)
+
+    # Létrehozunk egy Treeview-ot a lista számára és hozzáadjuk a görgetősávot
+    tree = ttk.Treeview(frame, columns=("ID", "Szekció"), show="headings", selectmode=EXTENDED)
+    scrollbar.config(command=tree.yview)
+
+    # Oszlopok beállítása
+    tree.heading("ID", text="ID")
+    tree.heading("Szekció", text="Szekció")
+
+    # Adatok feltöltése a Treeview-be
+    deletable_sections = get_deletable_sections()
+    for row in deletable_sections:
+        tree.insert("", "end", values=row)
+
+    # Elhelyezzük a Treeview-ot és a görgetősávot a Frame-ben
+    tree.grid(row=0, column=0)
+    scrollbar.grid(row=0, column=1, sticky="ns")
+
+    def delete_selected_sections():
+        selected_items = tree.selection()
+        if not selected_items:
+            messagebox.showwarning("Nincs kiválasztva", "Kérem, válassza ki a törölni kívánt szekciókat.")
+            return
+
+        for item in selected_items:
+            section_id = int(tree.item(item, "values")[0])
+            delete_section(section_id)
+
+        # Frissítjük a Treeview-t az új adatokkal (esetlegesen már törölt szekciókkal)
+        tree.delete(*tree.get_children())
+        deletable_sections = get_deletable_sections()
+        for row in deletable_sections:
+            tree.insert("", "end", values=row)
+
+    # Törlés gomb
+    delete_button = Button(section_deletion_query, text="Kiválasztott szekciók törlése", command=lambda:[play(),delete_selected_sections()])
+    delete_button.grid(row=0, column=0, padx=10, pady=10)
+
+    # Quit Button már megint
+    quit_button = Button(section_deletion_query, text="Kilépés", command=lambda:[play(),section_deletion_query.destroy()])
+    quit_button.grid(row=0, column=1, padx=10, pady=10)
 
 # Függvény a felhasználó regisztrációjához
 def regisztracio():
@@ -551,18 +791,52 @@ def bejelentkezes():
             regisztracio_gomb.grid_forget()
             bejel_gomb.config(state="disabled")
             bejel_gomb.grid_forget()         
-            # Kijelentkezés gomb
+            # Kijelentkezés gomb, stb.
             if bejelentkezett == 1:
-                placeholder_gomb = Button(app3, text="Placeholder")
-                placeholder_gomb.config(state="disabled")
-                placeholder_gomb.grid(row=9, column=4, padx=10)
-                placeholder_gomb.grid_forget()
+                cikk_hozzaadas_gomb.config(state="normal")
+                cikk_hozzaadas_gomb.grid(row=2, column=0, columnspan=3, padx=10)
+
+                cikk_cim_label.config(state="normal")
+                cikk_cim_label.grid(row=0, column=0, padx=10)
+
+                cikk_cim.config(state="normal")
+                cikk_cim.grid(row=0, column=1, padx=10)
+
+                szerzo_label.config(state="normal")
+                szerzo_label.grid(row=1, column=0, padx=10)
+
+                szerzo_id.config(state="normal")
+                szerzo_id.grid(row=1, column=1, padx=10)
+
+                cikk_id_label.config(state="normal")
+                cikk_id_label.grid(row=5, column=0, padx=10)
+
+                cikk_id.config(state="normal")
+                cikk_id.grid(row=5, column=1, padx=10)
+
+                uj_cikk_cim_label.config(state="normal")
+                uj_cikk_cim_label.grid(row=6, column=0, padx=10)
+
+                uj_cikk_cim.config(state="normal")
+                uj_cikk_cim.grid(row=6, column=1, padx=10)
+
+                cikk_torles_gomb.config(state="normal")
+                cikk_torles_gomb.grid(row=7, column=0, columnspan=2, padx=10)
+
+                cikk_frissites_gomb.config(state="normal")
+                cikk_frissites_gomb.grid(row=8, column=0, columnspan=2, padx=10)
+
+                eloadas_torlese_gomb.config(state="normal")
+                eloadas_torlese_gomb.grid(row=12, column=4, padx=10)
+
                 kijel_gomb.config(state="normal")
-                kijel_gomb.grid(row=12, column=4, padx=10)
+                kijel_gomb.grid(row=16, column=4, padx=10)
 
             messagebox.showinfo("Sikeres Bejelentkezés", "A bejelentkezés sikeres volt! " + str(bejelentkezett))
             if is_admin(felhasznalonev):
                 print("Az adminisztrátor bejelentkezett.")
+                szekcio_torlese_button.config(state="normal")
+                szekcio_torlese_button.grid(row=8, column=4, padx=10)
             else:
                 print("Nem adminisztrátor jelentkezett be.")
             app3.destroy()
@@ -583,6 +857,45 @@ def bejelentkezes():
 def kijelentkezes():
     bejelentkezett = 0
 
+    cikk_hozzaadas_gomb.config(state="disabled")
+    cikk_hozzaadas_gomb.grid_forget()
+
+    cikk_cim_label.config(state="disabled")
+    cikk_cim_label.grid_forget()
+
+    cikk_cim.config(state="disabled")
+    cikk_cim.grid_forget()
+
+    szerzo_label.config(state="disabled")
+    szerzo_label.grid_forget()
+
+    szerzo_id.config(state="disabled")
+    szerzo_id.grid_forget()
+
+    cikk_id_label.config(state="disabled")
+    cikk_id_label.grid_forget()
+
+    cikk_id.config(state="disabled")
+    cikk_id.grid_forget()
+
+    uj_cikk_cim_label.config(state="disabled")
+    uj_cikk_cim_label.grid_forget()
+
+    uj_cikk_cim.config(state="disabled")
+    uj_cikk_cim.grid_forget()
+
+    cikk_torles_gomb.config(state="disabled")
+    cikk_torles_gomb.grid_forget()
+
+    cikk_frissites_gomb.config(state="disabled")
+    cikk_frissites_gomb.grid_forget()
+
+    szekcio_torlese_button.config(state="disabled")
+    szekcio_torlese_button.grid_forget()
+
+    eloadas_torlese_gomb.config(state="disabled")
+    eloadas_torlese_gomb.grid_forget()
+
     regisztracio_gomb.config(state="normal")
     regisztracio_gomb.grid(row=9, column=4, padx=10)
 
@@ -595,13 +908,38 @@ def kijelentkezes():
 
 # Gomb a regisztráció kezdéséhez
 regisztracio_gomb = Button(app, text="Regisztráció", command=lambda: [play(), regisztracio()])
-regisztracio_gomb.grid(row=9, column=4, padx=10)
+regisztracio_gomb.grid(row=12, column=4, padx=10)
 
 # Gomb a bejelentkezéshez
 bejel_gomb = Button(app, text="Bejelentkezes", command=lambda: [play(), bejelentkezes()])
-bejel_gomb.grid(row=12, column=4, padx=10)
+bejel_gomb.grid(row=15, column=4, padx=10)
+
 
 kijel_gomb = Button(app, text="Kijelentkezés", command=lambda: [play(), kijelentkezes()])
+
+# Űrlap mezők és címkék a cikk hozzáadásához
+cikk_cim_label = Label(app, text="Cikk Címe:")
+cikk_cim = Entry(app)
+
+szerzo_label = Label(app, text="Szerző ID:")
+szerzo_id = Entry(app)
+
+# Függvény az új cikk hozzáadásához
+def uj_cikk():
+    try:
+        cikk_cim_text = cikk_cim.get()
+        szerzo_id_text = szerzo_id.get()
+        cursor.execute("INSERT INTO cikkek (cikk_cim, szerzo_id) VALUES (%s, %s)", (cikk_cim_text, szerzo_id_text))
+        db.commit()
+        cikk_cim.delete(0, END)
+        szerzo_id.delete(0, END)
+        cikkek_betoltes()
+    except IntegrityError as e:
+        # Handle IntegrityError
+        handle_integrity_error(e)
+
+# Gomb a cikk hozzáadásához
+cikk_hozzaadas_gomb = Button(app, text="Cikk Hozzáadása", command=lambda:[play(),uj_cikk()])
 
 app.mainloop()
 

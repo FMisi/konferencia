@@ -7,6 +7,7 @@ from mysql.connector.errors import IntegrityError
 import csv
 import pygame
 import configparser
+from datetime import datetime
 
 # Fő alkalmazás ablak
 app = Tk()
@@ -57,60 +58,51 @@ cursor = db.cursor(buffered=True)
 #for db in my_cursor:
 #	print(db)
 
-# Űrlap mezők és címkék a cikk hozzáadásához
-cikk_cim_label = Label(app, text="Cikk Címe:")
-cikk_cim_label.grid(row=0, column=0, padx=10)
-cikk_cim = Entry(app)
-cikk_cim.grid(row=0, column=1, padx=10)
-
-szerzo_label = Label(app, text="Szerző ID:")
-szerzo_label.grid(row=1, column=0, padx=10)
-szerzo_id = Entry(app)
-szerzo_id.grid(row=1, column=1, padx=10)
-
 # Write To CSV Excel Fgv.-k
 def write_to_csv_felhasznalok():
     cursor.execute("SELECT id, felhasznalonev, elotag, nev, szerepkor, email, intezmeny FROM felhasznalok")
     result = cursor.fetchall()
     justdoit(result)
 def justdoit(result):
-    with open("felhasznalok.csv", "w", newline="") as csvfile:
+    with open("csvk/felhasznalok.csv", "w", newline="") as csvfile:
         w = csv.writer(csvfile)
         w.writerow(["Felhasználó ID", "Felhasználónév", "Előtag", "Név", "Szerepkör", "Email", "Intézmény"])
         w.writerows(result)
 def write_to_csv_cikkek(result):
-    with open("cikkek.csv", "w", newline="") as csvfile:
+    with open("csvk/cikkek.csv", "w", newline="") as csvfile:
         w = csv.writer(csvfile)
         w.writerow(["Cikk ID", "Cikk Címe", "Szerző"])
         w.writerows(result)
 def write_to_csv_eloadasok(result):
-    with open("eloadasok.csv", "w", newline="") as csvfile:
+    with open("csvk/eloadasok.csv", "w", newline="") as csvfile:
         w = csv.writer(csvfile)
         w.writerow(["Előadás ID", "Cikk ID", "Cikk Cím", "Szekció ID", "Kezdés Időpont", "Előadó Név", "Előadó ID", "Előadás Hossz"])
         w.writerows(result)
 def write_to_csv_szekciok(result):
-    with open("szekciok.csv", "w", newline="") as csvfile:
+    with open("csvk/szekciok.csv", "w", newline="") as csvfile:
         w = csv.writer(csvfile)
         w.writerow(["ID", "Szekció Név", "Kezdési Időpont", "Levezető Elnök ID"])
         w.writerows(result)
-
-# Függvény az új cikk hozzáadásához
-def uj_cikk():
-    try:
-        cikk_cim_text = cikk_cim.get()
-        szerzo_id_text = szerzo_id.get()
-        cursor.execute("INSERT INTO cikkek (cikk_cim, szerzo_id) VALUES (%s, %s)", (cikk_cim_text, szerzo_id_text))
-        db.commit()
-        cikk_cim.delete(0, END)
-        szerzo_id.delete(0, END)
-        cikkek_betoltes()
-    except IntegrityError as e:
-        # Handle IntegrityError
-        handle_integrity_error(e)
-
-# Gomb a cikk hozzáadásához
-cikk_hozzaadas_gomb = Button(app, text="Cikk Hozzáadása", command=lambda:[play(),uj_cikk()])
-cikk_hozzaadas_gomb.grid(row=2, column=0, columnspan=3, padx=10)
+def write_to_csv_osszetett_1(result):
+    with open("csvk/osszetett_lekerdezes_1.csv", "w", newline="") as file:
+        w = csv.writer(file)
+        w.writerow(["Szekció Név", "Előadások Száma"])
+        w.writerows(result)
+def write_to_csv_osszetett_2(result):
+    with open("csvk/osszetett_lekerdezes_2.csv", "w", newline="") as file:
+        w = csv.writer(file)
+        w.writerow(["Szerző Neve", "Cikkek Száma"])
+        w.writerows(result)
+def write_to_csv_osszetett_3(result):
+    with open("csvk/osszetett_lekerdezes_3.csv", "w", newline="") as file:
+        w = csv.writer(file)
+        w.writerow(["Szerző Neve"])
+        w.writerows(result)
+def write_to_csv_nem_lett_eloadas(result):
+    with open("csvk/nem_lett_eloadas.csv", "w", newline="") as file:
+        w = csv.writer(file)
+        w.writerow(["Szekció ID", "Szekció Név"])
+        w.writerows(result)
 
 # Lista a cikkek megtekintéséhez
 cikk_lista = Listbox(app)
@@ -170,7 +162,7 @@ def list_felhasznalok():
     list_felhasznalo_query = Tk()
     list_felhasznalo_query.title("Listázás")
     list_felhasznalo_query.iconbitmap('konfico.ico')
-    list_felhasznalo_query.geometry("800x650")
+    list_felhasznalo_query.geometry("950x650")
     
     # DB-t lekérdez
     cursor.execute("SELECT * FROM Felhasznalok")
@@ -184,7 +176,7 @@ def list_felhasznalok():
     scrollbar = Scrollbar(frame, orient=VERTICAL)
     
     # Létrehozunk egy Listbox-ot a lista számára és hozzáadjuk a görgetősávot
-    listbox = Listbox(frame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, width=120, height=35)
+    listbox = Listbox(frame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, width=150, height=35)
     scrollbar.config(command=listbox.yview)
     
     # Elhelyezzük a Listbox-ot és a görgetősávot a Frame-ben
@@ -263,7 +255,11 @@ def list_eloadasok():
     scrollbar.grid(row=0, column=1, sticky="ns")
     
     for y in result:
-        listbox.insert(END, f"{y}")
+        # Módosítjuk a dátumot egyedi formátumra
+        formatted_date = y[4].strftime("%Y-%m-%d %H:%M")
+        
+        # Hozzáadjuk az elemet a Listbox-hoz a formázott dátummal
+        listbox.insert(END, f"{y[0]}, {y[1]}, {y[2]}, {y[3]}, {formatted_date}, {y[5]}, {y[6]}, {y[7]}")
     
     csv_button = Button(list_eloadas_query, text="Excel-be mentés (eloadasok.csv)", command=lambda: [play(), write_to_csv_eloadasok(result)])
     csv_button.grid(row=0, column=30, padx=10, pady=10)
@@ -271,7 +267,7 @@ def list_eloadasok():
     # Quit Button már megint
     quit_button = Button(list_eloadas_query, text="Kilépés", command=lambda: [play(), list_eloadas_query.destroy()])
     quit_button.grid(row=0, column=32, padx=10, pady=10)
-
+    
 def list_szekciok():
     list_szekcio_query = Tk()
     list_szekcio_query.title("Listázás")
@@ -300,7 +296,11 @@ def list_szekciok():
     scrollbar.grid(row=0, column=1, sticky="ns")
     
     for y in result:
-        listbox.insert(END, f"{y}")
+        # Módosítjuk a dátumot egyedi formátumra
+        formatted_date = y[2].strftime("%Y-%m-%d %H:%M")
+        
+        # Hozzáadjuk az elemet a Listbox-hoz a formázott dátummal
+        listbox.insert(END, f"{y[0]}, {y[1]}, {formatted_date}, {y[3]}")
     
     csv_button = Button(list_szekcio_query, text="Excel-be mentés (szekciok.csv)", command=lambda: [play(), write_to_csv_szekciok(result)])
     csv_button.grid(row=0, column=30, padx=10, pady=10)
@@ -313,23 +313,41 @@ def list_szekciok():
 def osszetett_lekerdezes_1():
     cursor.execute("SELECT szekciok.szekcio_nev, COUNT(eloadasok.id) AS eloadasok_szama FROM szekciok LEFT JOIN eloadasok ON szekciok.id = eloadasok.szekcio_id GROUP BY szekciok.szekcio_nev")
     eredmeny = cursor.fetchall()
-    
+
     # Új ablak létrehozása eredményekkel
     ossz1_query = Tk()
     ossz1_query.title("Eredmények - Összetett Lekérdezés 1")
     ossz1_query.iconbitmap('konfico.ico')
     ossz1_query.geometry("700x700")
-    eredmeny_azonosito = 1
-    for sor in eredmeny:
+
+    # Létrehozunk egy Frame-et a görgetősáv és a lista számára
+    frame = Frame(ossz1_query)
+    frame.grid(row=1, column=0, padx=10, pady=10, columnspan=2)
+
+    # Létrehozunk egy görgetősávot
+    scrollbar = Scrollbar(frame, orient=VERTICAL)
+
+    # Létrehozunk egy Listbox-ot a lista számára és hozzáadjuk a görgetősávot
+    listbox = Listbox(frame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, width=100, height=35)
+    scrollbar.config(command=listbox.yview)
+
+    # Elhelyezzük a Listbox-ot és a görgetősávot a Frame-ben
+    listbox.grid(row=0, column=0)
+    scrollbar.grid(row=0, column=1, sticky="ns")
+
+    # Az eredményeket megjelenítjük a Listbox-ban
+    for i, sor in enumerate(eredmeny):
         szekcio_nev = sor[0]
         eloadasok_szama = sor[1]
+        listbox.insert(END, f"Eredmény #{i + 1}: Szekció Neve: {szekcio_nev}, Előadások Száma: {eloadasok_szama}")
 
-        oszlop = 0 if eredmeny_azonosito % 2 == 0 else 1  # 2 oszlop van, páros indexűek az első oszlopban
-        sor_index = eredmeny_azonosito // 2  # Osztás egész értékkel
+    # Excel-be mentés gomb
+    csv_button = Button(ossz1_query, text="Excel-be mentés (osszetett_lekerdezes_1.csv)", command=lambda: [play(), write_to_csv_osszetett_1(eredmeny)])
+    csv_button.grid(row=0, column=0, padx=10, pady=10)
 
-        eredmeny_label = Label(ossz1_query, text=f"Eredmény #{eredmeny_azonosito}: Szekció Neve: {szekcio_nev}, Előadások Száma: {eloadasok_szama}")
-        eredmeny_label.grid(row=sor_index, column=oszlop)
-        eredmeny_azonosito += 1
+    # Kilépés gomb
+    quit_button = Button(ossz1_query, text="Kilépés", command=lambda: [play(), ossz1_query.destroy()])
+    quit_button.grid(row=0, column=1, padx=10, pady=10)
 
 # Gomb az összetett lekérdezés #1 futtatásához
 osszetett_lekerdezes_1_gomb = Button(app, text="Összetett Lekérdezés #1", command=lambda:[play(),osszetett_lekerdezes_1()])
@@ -339,24 +357,41 @@ osszetett_lekerdezes_1_gomb.grid(row=11, column=0, columnspan=2, padx=10)
 def osszetett_lekerdezes_2():
     cursor.execute("SELECT felhasznalok.nev, COUNT(cikkek.id) AS cikkek_szama FROM felhasznalok INNER JOIN cikkek ON felhasznalok.id = cikkek.szerzo_id GROUP BY felhasznalok.nev")
     eredmeny = cursor.fetchall()
-    
+
     # Új ablak létrehozása eredményekkel
     ossz2_query = Tk()
     ossz2_query.title("Eredmények - Összetett Lekérdezés 2")
     ossz2_query.iconbitmap('konfico.ico')
     ossz2_query.geometry("700x700")
-    # Az eredményeket két oszlopba rendezzük
-    eredmeny_azonosito = 1
-    for sor in eredmeny:
+
+    # Létrehozunk egy Frame-et a görgetősáv és a lista számára
+    frame = Frame(ossz2_query)
+    frame.grid(row=1, column=0, padx=10, pady=10, columnspan=2)
+
+    # Létrehozunk egy görgetősávot
+    scrollbar = Scrollbar(frame, orient=VERTICAL)
+
+    # Létrehozunk egy Listbox-ot a lista számára és hozzáadjuk a görgetősávot
+    listbox = Listbox(frame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, width=100, height=35)
+    scrollbar.config(command=listbox.yview)
+
+    # Elhelyezzük a Listbox-ot és a görgetősávot a Frame-ben
+    listbox.grid(row=0, column=0)
+    scrollbar.grid(row=0, column=1, sticky="ns")
+
+    # Az eredményeket megjelenítjük a Listbox-ban
+    for i, sor in enumerate(eredmeny):
         szerzo_nev = sor[0]
         cikkek_szama = sor[1]
-        
-        oszlop = 0 if eredmeny_azonosito % 2 == 0 else 1  # 2 oszlop van, páros indexűek az első oszlopban
-        sor_index = eredmeny_azonosito // 2  # Osztás egész értékkel
-        
-        eredmeny_label = Label(ossz2_query, text=f"Eredmény #{eredmeny_azonosito}: Szerző Neve: {szerzo_nev}, Cikkek Száma: {cikkek_szama}")
-        eredmeny_label.grid(row=sor_index, column=oszlop)
-        eredmeny_azonosito += 1
+        listbox.insert(END, f"Eredmény #{i + 1}: Szerző Neve: {szerzo_nev}, Cikkek Száma: {cikkek_szama}")
+
+    # Excel-be mentés gomb
+    csv_button = Button(ossz2_query, text="Excel-be mentés (osszetett_lekerdezes_2.csv)", command=lambda: [play(), write_to_csv_osszetett_2(eredmeny)])
+    csv_button.grid(row=0, column=0, padx=10, pady=10)
+
+    # Kilépés gomb
+    quit_button = Button(ossz2_query, text="Kilépés", command=lambda: [play(), ossz2_query.destroy()])
+    quit_button.grid(row=0, column=1, padx=10, pady=10)
 
 # Gomb az összetett lekérdezés #2 futtatásához
 osszetett_lekerdezes_2_gomb = Button(app, text="Összetett Lekérdezés #2", command=lambda:[play(),osszetett_lekerdezes_2()])
@@ -372,16 +407,37 @@ def osszetett_lekerdezes_3():
     cursor.execute("SELECT felhasznalok.nev FROM felhasznalok INNER JOIN cikkek ON felhasznalok.id = cikkek.szerzo_id GROUP BY felhasznalok.id, felhasznalok.nev HAVING COUNT(cikkek.id) = (SELECT MAX(CountCikkek) FROM (SELECT COUNT(cikkek2.id) AS CountCikkek FROM cikkek cikkek2 GROUP BY cikkek2.szerzo_id) AS MaxCikkek)")
     eredmeny = cursor.fetchall()
 
-    # Új ablak létrehozása az eredmennyel
-    eredmeny_label = Label(ossz3_query, text=f"A legtöbb cikket író szerző(k) neve(i): ")
+    # Létrehozunk egy Frame-et a görgetősáv és a lista számára
+    frame = Frame(ossz3_query)
+    frame.grid(row=1, column=0, padx=10, pady=10, columnspan=2)
+
+    # Létrehozunk egy görgetősávot
+    scrollbar = Scrollbar(frame, orient=VERTICAL)
+
+    # Létrehozunk egy Listbox-ot a lista számára és hozzáadjuk a görgetősávot
+    listbox = Listbox(frame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, width=50, height=15)
+    scrollbar.config(command=listbox.yview)
+
+    # Elhelyezzük a Listbox-ot és a görgetősávot a Frame-ben
+    listbox.grid(row=0, column=0)
+    scrollbar.grid(row=0, column=1, sticky="ns")
+
+    # Az eredményeket megjelenítjük a Listbox-ban
+    eredmeny_label = Label(ossz3_query, text="A legtöbb cikket író szerző(k) neve(i): ")
     for i, sor in enumerate(eredmeny):
         nev = sor[0]
-        eredmeny_label["text"] += nev
-    
+        listbox.insert(END, nev)
         # Ha ez nem az utolsó sor, adj hozzá egy vesszőt
         if i < len(eredmeny) - 1:
             eredmeny_label["text"] += ", "
-    eredmeny_label.grid(row=0, column=0, padx=10, pady=10)
+
+    # Excel-be mentés gomb
+    csv_button = Button(ossz3_query, text="Excel-be mentés (osszetett_lekerdezes_3.csv)", command=lambda: [play(), write_to_csv_osszetett_3(eredmeny)])
+    csv_button.grid(row=0, column=0, padx=10, pady=10)
+
+    # Kilépés gomb
+    quit_button = Button(ossz3_query, text="Kilépés", command=lambda: [play(), ossz3_query.destroy()])
+    quit_button.grid(row=0, column=1, padx=10, pady=10)
 
 # Gomb az összetett lekérdezés #3 futtatásához
 osszetett_lekerdezes_3_gomb = Button(app, text="Összetett Lekérdezés #3", command=lambda:[play(),osszetett_lekerdezes_3()])
@@ -391,16 +447,36 @@ def nem_lett_eloadas_rendelve():
     nler_query = Tk()
     nler_query.title("Eredmények - Nem Lett Előadás Rendelve")
     nler_query.iconbitmap('konfico.ico')
-    nler_query.geometry("500x500")
+    nler_query.geometry("800x700")
 
     cursor.execute("SELECT szekciok.id, szekciok.szekcio_nev FROM szekciok LEFT JOIN eloadasok ON szekciok.id = eloadasok.szekcio_id WHERE eloadasok.szekcio_id IS NULL")
     eredmeny = cursor.fetchall()
 
-    # Az eredmények megjelenítése két oszlopban
-    for i, eredmeny_sor in enumerate(eredmeny):
-        column = i % 2
-        eredmeny_label = Label(nler_query, text=f"Nem lett előadás rendelve: {eredmeny_sor}")
-        eredmeny_label.grid(row=i // 2, column=column, padx=10, pady=10)
+    # Létrehozunk egy Frame-et a görgetősáv és a lista számára
+    frame = Frame(nler_query)
+    frame.grid(row=1, column=0, padx=10, pady=10, columnspan=2)
+    
+    # Létrehozunk egy görgetősávot
+    scrollbar = Scrollbar(frame, orient=VERTICAL)
+    
+    # Létrehozunk egy Listbox-ot a lista számára és hozzáadjuk a görgetősávot
+    listbox = Listbox(frame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, width=105, height=35)
+    scrollbar.config(command=listbox.yview)
+    
+    # Elhelyezzük a Listbox-ot és a görgetősávot a Frame-ben
+    listbox.grid(row=0, column=0)
+    scrollbar.grid(row=0, column=1, sticky="ns")
+    
+    # Az eredmények megjelenítése a Listbox-ban
+    for eredmeny_sor in eredmeny:
+        listbox.insert(END, f"Nem lett előadás rendelve: {eredmeny_sor}")
+
+    csv_button = Button(nler_query, text="Excel-be mentés (nem_lett_eloadas.csv)", command=lambda: [play(), write_to_csv_nem_lett_eloadas(eredmeny)])
+    csv_button.grid(row=0, column=0, padx=10, pady=10)
+
+    # Quit Button már megint
+    quit_button = Button(nler_query, text="Kilépés", command=lambda: [play(), nler_query.destroy()])
+    quit_button.grid(row=0, column=2, padx=10, pady=10)
 
 # nler gomb
 nem_lett_eloadas_rendelve_gomb = Button(app, text="Szekciók, ahol nincs előadás", command=lambda:[play(),nem_lett_eloadas_rendelve()])
@@ -551,12 +627,23 @@ def bejelentkezes():
             regisztracio_gomb.grid_forget()
             bejel_gomb.config(state="disabled")
             bejel_gomb.grid_forget()         
-            # Kijelentkezés gomb
+            # Kijelentkezés gomb, stb.
             if bejelentkezett == 1:
-                placeholder_gomb = Button(app3, text="Placeholder")
-                placeholder_gomb.config(state="disabled")
-                placeholder_gomb.grid(row=9, column=4, padx=10)
-                placeholder_gomb.grid_forget()
+                cikk_hozzaadas_gomb.config(state="normal")
+                cikk_hozzaadas_gomb.grid(row=2, column=0, columnspan=3, padx=10)
+
+                cikk_cim_label.config(state="normal")
+                cikk_cim_label.grid(row=0, column=0, padx=10)
+
+                cikk_cim.config(state="normal")
+                cikk_cim.grid(row=0, column=1, padx=10)
+
+                szerzo_label.config(state="normal")
+                szerzo_label.grid(row=1, column=0, padx=10)
+
+                szerzo_id.config(state="normal")
+                szerzo_id.grid(row=1, column=1, padx=10)
+
                 kijel_gomb.config(state="normal")
                 kijel_gomb.grid(row=12, column=4, padx=10)
 
@@ -583,6 +670,21 @@ def bejelentkezes():
 def kijelentkezes():
     bejelentkezett = 0
 
+    cikk_hozzaadas_gomb.config(state="disabled")
+    cikk_hozzaadas_gomb.grid_forget()
+
+    cikk_cim_label.config(state="disabled")
+    cikk_cim_label.grid_forget()
+
+    cikk_cim.config(state="disabled")
+    cikk_cim.grid_forget()
+
+    szerzo_label.config(state="disabled")
+    szerzo_label.grid_forget()
+
+    szerzo_id.config(state="disabled")
+    szerzo_id.grid_forget()
+
     regisztracio_gomb.config(state="normal")
     regisztracio_gomb.grid(row=9, column=4, padx=10)
 
@@ -601,7 +703,32 @@ regisztracio_gomb.grid(row=9, column=4, padx=10)
 bejel_gomb = Button(app, text="Bejelentkezes", command=lambda: [play(), bejelentkezes()])
 bejel_gomb.grid(row=12, column=4, padx=10)
 
+
 kijel_gomb = Button(app, text="Kijelentkezés", command=lambda: [play(), kijelentkezes()])
+
+# Űrlap mezők és címkék a cikk hozzáadásához
+cikk_cim_label = Label(app, text="Cikk Címe:")
+cikk_cim = Entry(app)
+
+szerzo_label = Label(app, text="Szerző ID:")
+szerzo_id = Entry(app)
+
+# Függvény az új cikk hozzáadásához
+def uj_cikk():
+    try:
+        cikk_cim_text = cikk_cim.get()
+        szerzo_id_text = szerzo_id.get()
+        cursor.execute("INSERT INTO cikkek (cikk_cim, szerzo_id) VALUES (%s, %s)", (cikk_cim_text, szerzo_id_text))
+        db.commit()
+        cikk_cim.delete(0, END)
+        szerzo_id.delete(0, END)
+        cikkek_betoltes()
+    except IntegrityError as e:
+        # Handle IntegrityError
+        handle_integrity_error(e)
+
+# Gomb a cikk hozzáadásához
+cikk_hozzaadas_gomb = Button(app, text="Cikk Hozzáadása", command=lambda:[play(),uj_cikk()])
 
 app.mainloop()
 

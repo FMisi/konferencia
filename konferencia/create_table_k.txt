@@ -24,7 +24,9 @@ CREATE TABLE cikkek (
     id INT AUTO_INCREMENT PRIMARY KEY,
     cikk_cim VARCHAR(255) NOT NULL,
     szerzo_id INT,
-    FOREIGN KEY (szerzo_id) REFERENCES felhasznalok(id)
+    szekcio_id INT,
+    FOREIGN KEY (szerzo_id) REFERENCES felhasznalok(id),
+    FOREIGN KEY (szekcio_id) REFERENCES szekciok(id) 
 );
 
 -- Előadások tábla
